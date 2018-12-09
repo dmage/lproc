@@ -41,7 +41,14 @@ func ImportCSV(filename string, format config.Format, classifiers []classifier.C
 	var transactions []*transaction.Transaction
 	r := bufio.NewReader(rd)
 	lineno := 0
+	errors := 0
+	tooManyErrors := false
 	for {
+		if errors >= 10 {
+			tooManyErrors = true
+			break
+		}
+
 		lineno++
 		line, err := r.ReadString('\n')
 		if err == nil || line != "" {
@@ -68,7 +75,9 @@ func ImportCSV(filename string, format config.Format, classifiers []classifier.C
 
 			if len(fields) != len(format.Columns) {
 				log.Printf("unable to process CSV line: %s", line)
-				return fmt.Errorf("%s:%d: got %d columns, want %d", filename, lineno, len(fields), len(format.Columns))
+				log.Printf("%s:%d: got %d columns, want %d", filename, lineno, len(fields), len(format.Columns))
+				errors += 1
+				continue
 			}
 
 			state := rewriter.NewState(classifierFactory)
@@ -83,7 +92,9 @@ func ImportCSV(filename string, format config.Format, classifiers []classifier.C
 			for ruleno, rule := range format.Rewrite {
 				err := rule.Execute(state)
 				if err != nil {
-					return fmt.Errorf("%s:%d: rewrite rule %d: %s", filename, lineno, ruleno+1, err)
+					log.Printf("%s:%d: rewrite rule %d: %s", filename, lineno, ruleno+1, err)
+					errors += 1
+					continue
 				}
 			}
 
@@ -103,6 +114,12 @@ func ImportCSV(filename string, format config.Format, classifiers []classifier.C
 		} else if err != nil {
 			return fmt.Errorf("%s:%d: %s", filename, lineno, err)
 		}
+	}
+	if errors > 0 {
+		if tooManyErrors {
+			return fmt.Errorf("too many errors, aborted")
+		}
+		return fmt.Errorf("got %d error(s)", errors)
 	}
 	if format.Reverse {
 		l := len(transactions)
