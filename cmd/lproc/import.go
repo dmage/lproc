@@ -7,6 +7,7 @@ import (
 
 	"github.com/dmage/lproc/pkg/config"
 	"github.com/dmage/lproc/pkg/importcsv"
+	"github.com/dmage/lproc/pkg/ledger"
 )
 
 var importArgs struct {
@@ -18,6 +19,11 @@ var importCmd = &cobra.Command{
 	Short: "Import transactions from a CSV file",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		transactions, err := ledger.GetTransactions()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		rules, err := config.LoadDefaultRules()
 		if err != nil {
 			log.Fatal(err)
@@ -29,7 +35,7 @@ var importCmd = &cobra.Command{
 		}
 
 		for _, arg := range args {
-			if err := importcsv.ImportCSV(arg, format, rules.Classifiers); err != nil {
+			if err := importcsv.ImportCSV(arg, format, transactions, rules.Classifiers); err != nil {
 				log.Fatal(err)
 			}
 		}

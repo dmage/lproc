@@ -13,16 +13,28 @@ import (
 
 	"github.com/dmage/lproc/pkg/classifier"
 	"github.com/dmage/lproc/pkg/config"
+	"github.com/dmage/lproc/pkg/ledger"
 	"github.com/dmage/lproc/pkg/rewriter"
 	"github.com/dmage/lproc/pkg/transaction"
 )
 
-func ImportCSV(filename string, format config.Format, classifiers []classifier.Config) error {
+func ImportCSV(filename string, format config.Format, existingTransactionsList []ledger.Transaction, classifiers []classifier.Config) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
+	existingTransactions := make(map[string]ledger.Transaction)
+	for _, tr := range existingTransactionsList {
+		if tr.ID == "" {
+			continue
+		}
+		if _, ok := existingTransactions[tr.ID]; ok {
+			return fmt.Errorf("found duplicates in the existing transactions (TransactionID: %s)", tr.ID)
+		}
+		existingTransactions[tr.ID] = tr
+	}
 
 	var rd io.Reader
 	if format.Encoding != "" {
@@ -98,16 +110,27 @@ func ImportCSV(filename string, format config.Format, classifiers []classifier.C
 				}
 			}
 
-			transactions = append(transactions, &transaction.Transaction{
+			payee := strings.Trim(state.Get("Payee"), " \t")
+			if payee == "" {
+				payee = "<Unspecified payee>"
+			}
+
+			tr := &transaction.Transaction{
 				ID:       state.Get("TransactionID"),
 				CSV:      state.Get("CSV"),
 				Date:     state.Get("Date"),
-				Payee:    state.Get("Payee"),
+				Payee:    payee,
 				Amount:   state.Get("Amount"),
 				Currency: state.Get("Currency"),
 				To:       state.Get("To"),
 				From:     state.Get("From"),
-			})
+			}
+			if tr.ID == "" {
+				log.Printf("%s:%d: invalid transaction: TransactionID should have a non-empty value", filename, lineno)
+				errors += 1
+				continue
+			}
+			transactions = append(transactions, tr)
 		}
 		if err == io.EOF {
 			break
@@ -121,14 +144,31 @@ func ImportCSV(filename string, format config.Format, classifiers []classifier.C
 		}
 		return fmt.Errorf("got %d error(s)", errors)
 	}
+
 	if format.Reverse {
 		l := len(transactions)
 		for i := 0; i < l/2; i++ {
 			transactions[i], transactions[l-1-i] = transactions[l-1-i], transactions[i]
 		}
 	}
+
+	var filteredTransactions []*transaction.Transaction
 	for _, tr := range transactions {
+		if etr, ok := existingTransactions[tr.ID]; ok {
+			if tr.Date == etr.Date && tr.Payee == etr.Payee {
+				log.Printf("SKIP: %s %s", tr.Date, tr.Payee)
+			} else {
+				log.Printf("!!!!: %s %s", tr.Date, tr.Payee)
+			}
+			continue
+		}
+		log.Printf(" ADD: %s %s", tr.Date, tr.Payee)
+		filteredTransactions = append(filteredTransactions, tr)
+	}
+
+	for _, tr := range filteredTransactions {
 		tr.Print()
 	}
+
 	return nil
 }
