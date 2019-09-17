@@ -49,6 +49,11 @@ func ImportCSV(filename string, format config.Format, existingTransactionsList [
 	}
 
 	classifierFactory := classifier.NewFactory(classifiers)
+	defer func() {
+		if err := classifierFactory.Close(); err != nil {
+			log.Printf("unable to close classifiers factory: %s", err)
+		}
+	}()
 
 	var transactions []*transaction.Transaction
 	r := bufio.NewReader(rd)

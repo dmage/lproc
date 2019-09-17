@@ -11,10 +11,12 @@ type Config struct {
 
 type Classifier interface {
 	Classify(in string) []string
+	Close() error
 }
 
 type Factory interface {
 	GetClassifier(name string) (Classifier, error)
+	Close() error
 }
 
 type factory struct {
@@ -45,4 +47,13 @@ func (f *factory) GetClassifier(name string) (Classifier, error) {
 		return c, nil
 	}
 	return nil, fmt.Errorf("unknown classifier: %s", name)
+}
+
+func (f *factory) Close() error {
+	for name, c := range f.cache {
+		if err := c.Close(); err != nil {
+			return fmt.Errorf("close classifier %s: %s", name, err)
+		}
+	}
+	return nil
 }

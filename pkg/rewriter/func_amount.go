@@ -14,6 +14,8 @@ func init() {
 var (
 	amount_re_1space000comma00 = regexp.MustCompile(`^([+-]?)((?:[1-9][0-9 ]*)?[0-9]),([0-9][0-9])$`)
 	amount_re_1000comma00      = regexp.MustCompile(`^([+-]?)((?:[1-9][0-9]*)?[0-9]),([0-9][0-9])$`)
+	amount_re_1000dot          = regexp.MustCompile(`^([+-]?)((?:[1-9][0-9]*)?[0-9])(?:\.([0-9]{0,2}))?$`)
+	amount_re_1000dot00        = regexp.MustCompile(`^([+-]?)((?:[1-9][0-9]*)?[0-9])\.([0-9][0-9])$`)
 )
 
 func amount(pattern string, in string) string {
@@ -33,6 +35,18 @@ func amount(pattern string, in string) string {
 		return fmt.Sprintf("%s%s.%s", sign(match[1]), strings.Replace(match[2], " ", "", -1), match[3])
 	case "1000,00":
 		match := amount_re_1000comma00.FindStringSubmatch(in)
+		if match == nil {
+			return ""
+		}
+		return fmt.Sprintf("%s%s.%s", sign(match[1]), match[2], match[3])
+	case "1000.":
+		match := amount_re_1000dot.FindStringSubmatch(in)
+		if match == nil {
+			return ""
+		}
+		return fmt.Sprintf("%s%s.%02s", sign(match[1]), match[2], match[3])
+	case "1000.00":
+		match := amount_re_1000dot00.FindStringSubmatch(in)
 		if match == nil {
 			return ""
 		}
